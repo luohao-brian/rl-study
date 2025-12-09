@@ -104,19 +104,4 @@ uv run maze/main.py dqn
   - MC：按间隔打印摘要日志，不逐条打印细节，避免刷屏。
   - DQN：按间隔打印训练回合的核心指标。
 
-## 常见问题
-
-- 运行时出现 NumPy 初始化警告（`Failed to initialize NumPy`）？
-  - 已将 `numpy` 加入依赖；若仍有警告，先执行 `uv sync` 同步依赖。
-- `torch` 未安装或版本不匹配？
-  - 执行 `uv sync`；或检查 `pyproject.toml` 的 `requires-python` 与 `torch` 版本兼容性。
-- 如何修改迷宫？
-  - 在 `main.py` 的命令函数内，调整传给 `build_env()` 的参数（如 `obstacles` 布局）。
-
-## 开发者提示
-
-- 代码风格：保持变量名清晰、中文注释到位、输出信息简洁。
-- 扩展方向：
-  - 新增算法（如 SARSA/Q-learning），复用 `build_env` 与 CLI 结构。
-  - 增加更复杂的地图与奖励设计，比较不同算法在复杂任务上的表现。
-  - 新增子项目目录（例如 `openai/cartpole/`），约定每个子项目内包含 `main.py` 与其算法/环境实现；在根目录使用 `uv run openai/cartpole/main.py ...` 运行。
+ 

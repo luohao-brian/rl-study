@@ -88,10 +88,10 @@ class MazeEnv:
         }
         # 生成所有有效状态（排除障碍物）
         self.states = [
-            (r, c)
-            for r in range(self.height)
-            for c in range(self.width)
-            if (r, c) not in self.obstacles
+            (row, col)
+            for row in range(self.height)
+            for col in range(self.width)
+            if (row, col) not in self.obstacles
         ]
 
     def reset(self):
@@ -113,19 +113,19 @@ class MazeEnv:
         """
         return state == self.goal
 
-    def _valid_pos(self, r, c):
+    def _valid_pos(self, row, col):
         """检查位置是否有效（在网格内且非障碍物）
         
         参数:
-            r: 行坐标
-            c: 列坐标
+            row: 行坐标
+            col: 列坐标
             
         返回:
             True 如果位置有效，否则返回 False
         """
-        if r < 0 or r >= self.height or c < 0 or c >= self.width:
+        if row < 0 or row >= self.height or col < 0 or col >= self.width:
             return False
-        if (r, c) in self.obstacles:
+        if (row, col) in self.obstacles:
             return False
         return True
 
@@ -142,20 +142,20 @@ class MazeEnv:
             - reward: 获得的奖励
             - done: 是否到达终止状态
         """
-        # 获取动作对应的位移
-        dr, dc = self._delta[action]
-        # 计算新位置
-        nr, nc = state[0] + dr, state[1] + dc
+        # 获取动作对应的位移 (delta_row, delta_col)
+        delta_row, delta_col = self._delta[action]
+        # 计算新位置 (new_row, new_col)
+        new_row, new_col = state[0] + delta_row, state[1] + delta_col
         
         # 检查新位置是否有效
-        if not self._valid_pos(nr, nc):
+        if not self._valid_pos(new_row, new_col):
             # 无效动作，保持当前状态并给予惩罚
             next_state = state
             reward = self.invalid_penalty
             done = False
             return next_state, reward, done
             
-        next_state = (nr, nc)
+        next_state = (new_row, new_col)
         
         # 检查是否到达终点
         if next_state == self.goal:
@@ -183,23 +183,22 @@ class MazeEnv:
         arrow = {'U': '↑', 'D': '↓', 'L': '←', 'R': '→'}
         
         # 逐行构建可视化
-        for r in range(self.height):
-            row = []
-            for c in range(self.width):
-                pos = (r, c)
+        for row in range(self.height):
+            line = []
+            for col in range(self.width):
+                position = (row, col)
                 
-                if pos in self.obstacles:
-                    row.append('X')  # 障碍物
-                elif pos == self.start:
-                    row.append('S')  # 起点
-                elif pos == self.goal:
-                    row.append('G')  # 终点
+                if position in self.obstacles:
+                    line.append('X')  # 障碍物
+                elif position == self.start:
+                    line.append('S')  # 起点
+                elif position == self.goal:
+                    line.append('G')  # 终点
                 else:
-                    a = policy.get(pos)
+                    action = policy.get(position)
                     # 未定义策略位置使用·（点）表示
-                    row.append(arrow.get(a, '·'))
-                    
-            lines.append(' '.join(row))
+                    line.append(arrow.get(action, '·'))
+            lines.append(' '.join(line))
             
         return '\n'.join(lines)
 
@@ -214,17 +213,17 @@ class MazeEnv:
             - ·: 空格（可通行）
         """
         lines = []
-        for r in range(self.height):
-            row = []
-            for c in range(self.width):
-                pos = (r, c)
-                if pos in self.obstacles:
-                    row.append('X')
-                elif pos == self.start:
-                    row.append('S')
-                elif pos == self.goal:
-                    row.append('G')
+        for row in range(self.height):
+            line = []
+            for col in range(self.width):
+                position = (row, col)
+                if position in self.obstacles:
+                    line.append('X')
+                elif position == self.start:
+                    line.append('S')
+                elif position == self.goal:
+                    line.append('G')
                 else:
-                    row.append('·')
-            lines.append(' '.join(row))
+                    line.append('·')
+            lines.append(' '.join(line))
         return '\n'.join(lines)

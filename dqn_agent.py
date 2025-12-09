@@ -27,7 +27,7 @@ import torch.optim as optim
 class ReplayBuffer:
     """固定大小的经验回放缓冲区
 
-    存储智能体与环境交互的经验轨迹 (s, a, r, s', done)，并提供随机批量采样功能。
+    存储智能体与环境交互的经验轨迹 (state, action, reward, next_state, done)，并提供随机批量采样功能。
     经验回放可以打破数据的时间相关性，提高训练稳定性和样本利用率。
     """
 
@@ -202,10 +202,12 @@ class DQNAgent:
             return random.choice(self.env.actions), "explore"
         # Greedy based on current Q-network
         with torch.no_grad():
-            si = torch.tensor([self.state_to_index(state)], dtype=torch.long)
-            q_values = self.q_net(si)
-            a_idx = int(torch.argmax(q_values, dim=1).item())
-            return self.idx_to_action[a_idx], "greedy"
+            # 将二维坐标状态转换为索引，并送入Q网络计算各动作Q值
+            state_idx = torch.tensor([self.state_to_index(state)], dtype=torch.long)
+            q_values = self.q_net(state_idx)
+            # 选择Q值最大的动作索引
+            action_idx = int(torch.argmax(q_values, dim=1).item())
+            return self.idx_to_action[action_idx], "greedy"
 
     def push_transition(self, state, action, reward, next_state, done_flag):
         """将一条经验轨迹存入回放缓冲区

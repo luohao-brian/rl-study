@@ -1,5 +1,5 @@
 from typing import Optional
-from mc_agent import MCAgent
+from maze.mc_agent import MCAgent
 
 def train_to_coverage(agent: MCAgent, max_episodes: Optional[int] = None, check_every: int = 20):
     """训练过程：按最大回合数进行训练（不再计算覆盖统计）。"""

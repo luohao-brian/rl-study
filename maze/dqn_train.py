@@ -9,8 +9,8 @@ This module provides:
 
 import torch
 
-from maze_env import build_env
-from dqn_agent import DQNAgent, DQNConfig
+from maze.maze_env import build_env
+from maze.dqn_agent import DQNAgent, DQNConfig
 
 
 # 统一使用 maze_env 提供的环境构建接口

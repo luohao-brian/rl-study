@@ -27,7 +27,7 @@
 """
 
 import click
-from maze_env import build_env
+from maze.maze_env import build_env
 
 
 @click.group()
@@ -43,8 +43,8 @@ def cli():
 def mc():
     """使用蒙特卡洛控制方法求解迷宫"""
     # 参考 DQN 的结构，使用 mc_agent + mc_train
-    from mc_agent import MCAgent, MCConfig
-    from mc_train import train_to_coverage
+    from maze.mc_agent import MCAgent, MCConfig
+    from maze.mc_train import train_to_coverage
 
     print("=== 蒙特卡洛控制方法求解迷宫 ===")
 
@@ -74,8 +74,8 @@ def mc():
 @cli.command()
 def dqn():
     """使用DQN深度强化学习方法求解迷宫"""
-    from dqn_agent import DQNAgent, DQNConfig
-    from dqn_train import train, evaluate_policy, print_final_policy
+    from maze.dqn_agent import DQNAgent, DQNConfig
+    from maze.dqn_train import train, evaluate_policy, print_final_policy
 
     print("=== DQN深度强化学习方法求解迷宫 ===")
 

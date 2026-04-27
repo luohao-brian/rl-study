@@ -9,3 +9,9 @@ dependencies = [
     "click>=8.0.0",
     "numpy>=1.26",
 ]
+
+[project.scripts]
+maze = "maze.main:cli"
+
+[tool.uv]
+package = true

@@ -13,6 +13,9 @@ from dataclasses import dataclass
 from collections import defaultdict
 import random
 from typing import List, Tuple
+import json
+import os
+from maze.base import BaseAgent
 
 
 @dataclass
@@ -30,14 +33,14 @@ class MCConfig:
     print_summary: bool = True
 
 
-class MCAgent:
+class MCAgent(BaseAgent):
     """蒙特卡洛控制智能体
 
-    负责：
-    - 按 ε-贪婪策略采样轨迹
-    - 从轨迹计算回报并更新 Q(s,a)
+    实现 BaseAgent 接口。负责：
+    - 按 ε-贪婪策略选择动作
+    - 记录单步经验到局部轨迹中
+    - 回合结束时从轨迹计算回报并更新 Q(s,a)
     - 基于 Q 值生成/更新策略 Pi(s)
-    - 提供策略评估与可视化辅助
     """
 
     def __init__(self, env, cfg: MCConfig):
@@ -54,6 +57,7 @@ class MCAgent:
         self.returns_sum = defaultdict(float)
         self.returns_count = defaultdict(int)
         self.policy = {}
+        self.current_trajectory = []
         random.seed(cfg.seed)
 
     def _greedy_action(self, state):
@@ -68,57 +72,26 @@ class MCAgent:
             best_a = random.choice(self.env.actions)
         return best_a
 
-    def _select_action(self, state):
-        """根据当前策略与ε-贪婪选择动作，仅返回动作字符。"""
-        if random.random() < self.epsilon:
+    def select_action(self, state, is_training: bool = True):
+        """实现 BaseAgent 接口"""
+        if is_training and random.random() < self.epsilon:
             return random.choice(self.env.actions)
         a = self.policy.get(state)
         if a is None:
             a = self._greedy_action(state)
         return a
 
-    def _simulate_episode(self) -> List[Tuple[tuple, str, float, tuple]]:
-        """
-        采样一个完整回合，返回轨迹：[(state, action, reward, next_state), ...]
-        """
-        trajectory = []
-        # Exploring Starts：随机起点+随机首动作，增加覆盖
-        if self.exploring_starts:
-            candidates = [st for st in self.env.states if st != self.env.goal]
-            state = random.choice(candidates)
-            first_action = random.choice(self.env.actions)
-            next_state, reward, done = self.env.step(state, first_action)
-            trajectory.append((state, first_action, reward, next_state))
-            state = next_state
-            if done:
-                return trajectory
-        else:
-            state = self.env.reset()
+    def step(self, state, action, reward, next_state, done):
+        """实现 BaseAgent 接口，将单步经验记入当前轨迹"""
+        self.current_trajectory.append((state, action, reward, next_state))
 
-        for _ in range(self.max_steps):
-            if self.env.is_terminal(state):
-                break
-            action = self._select_action(state)
-            next_state, reward, done = self.env.step(state, action)
-            trajectory.append((state, action, reward, next_state))
-            state = next_state
-            if done:
-                break
-        return trajectory
-
-    def _update_from_trajectory(self, trajectory, episode_idx: int):
-        """
-        单循环处理轨迹：反向累计回报并更新 Q，随后刷新涉及状态的策略。
-
-        参数:
-            trajectory: [(state, action, reward, next_state), ...]
-            episode_idx: 当前回合编号（用于间隔摘要日志）
-        """
+    def end_episode(self, episode_idx: int):
+        """实现 BaseAgent 接口，反向计算回报并更新 Q-Table，然后清空轨迹"""
         G = 0.0
         visited_states = set()
         updated_keys = []
-        # 反向遍历：一步计算G并即时更新Q
-        for state, action, reward, _ in reversed(trajectory):
+        # 反向遍历
+        for state, action, reward, _ in reversed(self.current_trajectory):
             G = reward + self.gamma * G
             key = (state, action)
             self.returns_sum[key] += G
@@ -131,7 +104,7 @@ class MCAgent:
         for state in visited_states:
             self.policy[state] = self._greedy_action(state)
 
-        # 摘要日志（轻量，不影响单循环处理）
+        # 摘要日志
         if self.print_summary and (episode_idx % self.log_interval == 0):
             total_pairs = len(updated_keys)
             total_states = len(visited_states)
@@ -143,41 +116,40 @@ class MCAgent:
             else:
                 q_mean = q_min = q_max = float('nan')
             print(
-                f"[第 {episode_idx} 回] len={len(trajectory)} Q更新={total_pairs} Pi更新={total_states} "
+                f"[第 {episode_idx} 回] len={len(self.current_trajectory)} Q更新={total_pairs} Pi更新={total_states} "
                 f"Q统计(mean={q_mean:.3f}, min={q_min:.3f}, max={q_max:.3f})"
             )
+            
+        self.current_trajectory = []
 
+    def save(self, path: str):
+        """将 Q-Table 和 Policy 保存为 JSON 格式"""
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        # 将 (tuple) 键转换为字符串键
+        q_serializable = {f"{s[0]},{s[1]},{a}": v for (s, a), v in self.Q.items()}
+        policy_serializable = {f"{s[0]},{s[1]}": a for s, a in self.policy.items()}
+        
+        data = {
+            "Q": q_serializable,
+            "policy": policy_serializable
+        }
+        with open(path, 'w') as f:
+            json.dump(data, f, indent=2)
+        print(f"MC模型已保存至: {path}")
 
-    def evaluate_policy(self, max_steps=200):
-        print("\n===== 策略验证：按最终策略从起点尝试到达终点 =====")
-        state = self.env.reset()
-        total_reward = 0.0
-        path = [state]
-        for _ in range(max_steps):
-            if self.env.is_terminal(state):
-                break
-            action = self.policy.get(state)
-            if action is None:
-                action = self._greedy_action(state)
-            next_state, reward, done = self.env.step(state, action)
-            total_reward += reward
-            path.append(next_state)
-            state = next_state
-            if done:
-                break
-        reached = self.env.is_terminal(state)
-        print(f"是否到达终点：{'是' if reached else '否'}；步数：{len(path)-1}；累计奖励：{total_reward:.2f}")
-        return reached, path, total_reward
-
-    def _print_final_results(self):
-        valid = set(self.env.states)
-        self.policy = {s: a for s, a in self.policy.items() if s in valid}
-        print("\n最终 Q(s,a)：")
-        keys = sorted(self.Q.keys())
-        for (s, a) in keys:
-            print(f"  s={s} a={a} -> Q={self.Q[(s,a)]:.4f}")
-        print("\n最终 Pi(s)：")
-        for s in sorted(self.env.states):
-            print(f"  s={s} -> a={self.policy.get(s, self._greedy_action(s))}")
-        print("\n最佳策略棋盘（S=起点，G=终点，X=障碍，箭头=动作）：")
-        print(self.env.render_policy(self.policy))
+    def load(self, path: str):
+        """从 JSON 文件加载 Q-Table 和 Policy"""
+        with open(path, 'r') as f:
+            data = json.load(f)
+            
+        self.Q = defaultdict(float)
+        for k, v in data["Q"].items():
+            r, c, a = k.split(',')
+            self.Q[((int(r), int(c)), a)] = float(v)
+            
+        self.policy = {}
+        for k, v in data["policy"].items():
+            r, c = k.split(',')
+            self.policy[(int(r), int(c))] = v
+            
+        print(f"MC模型已从 {path} 加载")

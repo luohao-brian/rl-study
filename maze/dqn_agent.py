@@ -22,6 +22,9 @@ import math
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import os
+
+from maze.base import BaseAgent
 
 
 class ReplayBuffer:
@@ -139,10 +142,10 @@ class DQNConfig:
     log_interval: int = 20
 
 
-class DQNAgent:
+class DQNAgent(BaseAgent):
     """DQN智能体类，用于迷宫环境的强化学习
     
-    主要职责:
+    实现 BaseAgent 接口。主要职责:
     - 创建和管理Q网络与目标网络
     - 实现ε-贪心策略的动作选择
     - 在经验回放缓冲区中存储和采样轨迹数据
@@ -189,17 +192,10 @@ class DQNAgent:
         r, c = state
         return r * self.env.width + c
 
-    def select_action(self, state: Tuple[int, int]) -> Tuple[str, str]:
-        """使用ε-贪婪策略选择动作
-        
-        参数:
-            state: 当前状态的二维坐标
-            
-        返回:
-            一个元组 (动作字符, 模式)，其中模式为 "explore"（探索）或 "greedy"（利用）
-        """
-        if random.random() < self.epsilon:
-            return random.choice(self.env.actions), "explore"
+    def select_action(self, state: Tuple[int, int], is_training: bool = True) -> str:
+        """实现 BaseAgent 接口：使用ε-贪婪策略选择动作"""
+        if is_training and random.random() < self.epsilon:
+            return random.choice(self.env.actions)
         # Greedy based on current Q-network
         with torch.no_grad():
             # 将二维坐标状态转换为索引，并送入Q网络计算各动作Q值
@@ -207,27 +203,40 @@ class DQNAgent:
             q_values = self.q_net(state_idx)
             # 选择Q值最大的动作索引
             action_idx = int(torch.argmax(q_values, dim=1).item())
-            return self.idx_to_action[action_idx], "greedy"
+            return self.idx_to_action[action_idx]
 
-    def push_transition(self, state, action, reward, next_state, done_flag):
-        """将一条经验轨迹存入回放缓冲区
-        
-        参数:
-            state: 当前状态的二维坐标 (row, col)
-            action: 选择的动作字符 (action)
-            reward: 获得的即时奖励 (float)
-            next_state: 下一状态的二维坐标 (row, col)
-            done_flag: 是否到达终止状态 (bool)
-        """
+    def step(self, state, action, reward, next_state, done):
+        """实现 BaseAgent 接口：将单步经验记入回放缓冲区，并执行更新"""
         self.buffer.push(
             self.state_to_index(state),
             self.action_to_idx[action],
             reward,
             self.state_to_index(next_state),
-            done_flag,
+            done,
         )
+        return self._update_network()
 
-    def update(self):
+    def end_episode(self, episode_idx: int):
+        """实现 BaseAgent 接口：处理 epsilon 衰减和目标网络更新"""
+        self._decay_epsilon(episode_idx)
+        if episode_idx % self.cfg.target_update_interval == 0:
+            self._hard_update_target()
+
+    def save(self, path: str):
+        """保存 DQN 网络权重到指定路径"""
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        torch.save(self.q_net.state_dict(), path)
+        print(f"DQN模型已保存至: {path}")
+
+    def load(self, path: str):
+        """从指定路径加载 DQN 网络权重"""
+        self.q_net.load_state_dict(torch.load(path))
+        self.target_net.load_state_dict(self.q_net.state_dict())
+        self.q_net.eval()
+        self.target_net.eval()
+        print(f"DQN模型已从 {path} 加载")
+
+    def _update_network(self):
         """执行一次Q网络的梯度更新（如果缓冲区有足够样本）
         
         返回:
@@ -263,7 +272,7 @@ class DQNAgent:
         self.optimizer.step()
         return float(loss.item())
 
-    def decay_epsilon(self, episode_idx: int):
+    def _decay_epsilon(self, episode_idx: int):
         """线性衰减ε值
         
         参数:
@@ -276,7 +285,7 @@ class DQNAgent:
         frac = 1.0 - t / float(self.cfg.epsilon_decay_episodes)
         self.epsilon = self.cfg.epsilon_end + (self.cfg.epsilon_start - self.cfg.epsilon_end) * max(0.0, frac)
 
-    def hard_update_target(self):
+    def _hard_update_target(self):
         """硬更新目标网络的权重
         
         过程:

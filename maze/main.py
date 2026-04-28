@@ -40,13 +40,14 @@ def cli():
 
 
 @cli.command()
-def mc():
+@click.option("--mode", type=click.Choice(["train", "eval"]), default="train", help="运行模式：train(训练) 或 eval(评估)")
+@click.option("--model-path", type=str, default="models/mc_model.json", help="MC模型文件的保存/加载路径")
+def mc(mode, model_path):
     """使用蒙特卡洛控制方法求解迷宫"""
-    # 参考 DQN 的结构，使用 mc_agent + mc_train
     from maze.mc_agent import MCAgent, MCConfig
-    from maze.mc_train import train_to_coverage
+    from maze.trainer import Trainer
 
-    print("=== 蒙特卡洛控制方法求解迷宫 ===")
+    print(f"=== 蒙特卡洛控制方法求解迷宫 (模式: {mode}) ===")
 
     env = build_env(
         width=5,
@@ -62,22 +63,34 @@ def mc():
     print("迷宫布局（S=起点，G=终点，X=障碍，·=空）：")
     print(env.render_maze())
 
-    # 使用 Config 默认值进行初始化（不在此处定义重复参数）
+    # 使用 Config 默认值进行初始化
     cfg = MCConfig()
     print(f"参数: episodes={cfg.episodes}, check_every={cfg.check_every}, epsilon={cfg.epsilon}, gamma={cfg.gamma}")
-    mc_agent = MCAgent(env, cfg)
+    
+    agent = MCAgent(env, cfg)
+    trainer = Trainer(env, agent)
 
-    train_to_coverage(mc_agent, max_episodes=cfg.episodes, check_every=cfg.check_every)
-    mc_agent.evaluate_policy(max_steps=100)
-
+    if mode == "train":
+        trainer.train(episodes=cfg.episodes, max_steps=cfg.max_steps, log_interval=cfg.log_interval)
+        agent.save(model_path)
+        
+        # 训练结束后顺便评估一下
+        trainer.evaluate(max_steps=100)
+        trainer.print_summary()
+    elif mode == "eval":
+        agent.load(model_path)
+        trainer.evaluate(max_steps=100)
+        trainer.print_summary()
 
 @cli.command()
-def dqn():
+@click.option("--mode", type=click.Choice(["train", "eval"]), default="train", help="运行模式：train(训练) 或 eval(评估)")
+@click.option("--model-path", type=str, default="models/dqn_model.pth", help="DQN模型文件的保存/加载路径")
+def dqn(mode, model_path):
     """使用DQN深度强化学习方法求解迷宫"""
     from maze.dqn_agent import DQNAgent, DQNConfig
-    from maze.dqn_train import train, evaluate_policy, print_final_policy
+    from maze.trainer import Trainer
 
-    print("=== DQN深度强化学习方法求解迷宫 ===")
+    print(f"=== DQN深度强化学习方法求解迷宫 (模式: {mode}) ===")
 
     env = build_env(
         width=5,
@@ -93,16 +106,24 @@ def dqn():
     print("迷宫布局（S=起点，G=终点，X=障碍，·=空）：")
     print(env.render_maze())
 
-    # 使用 Config 默认值进行初始化（不在此处定义重复参数）
+    # 使用 Config 默认值进行初始化
     cfg = DQNConfig()
     print(f"参数: episodes={cfg.episodes}, log_interval={cfg.log_interval}, batch_size={cfg.batch_size}, lr={cfg.lr}")
+    
     agent = DQNAgent(env, cfg, seed=42)
+    trainer = Trainer(env, agent)
 
-    train(agent)
-    print("\n训练结束，进行策略评估（贪心）…")
-    reached, steps, total_reward = evaluate_policy(env, agent, max_steps=200)
-    print(f"是否到达终点：{'是' if reached else '否'}；步数：{steps}；累计奖励：{total_reward:.2f}")
-    print_final_policy(env, agent)
+    if mode == "train":
+        trainer.train(episodes=cfg.episodes, max_steps=cfg.max_steps_per_episode, log_interval=cfg.log_interval)
+        agent.save(model_path)
+        
+        # 训练结束后顺便评估一下
+        trainer.evaluate(max_steps=200)
+        trainer.print_summary()
+    elif mode == "eval":
+        agent.load(model_path)
+        trainer.evaluate(max_steps=200)
+        trainer.print_summary()
 
 
 if __name__ == "__main__":

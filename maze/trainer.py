@@ -39,12 +39,15 @@ class Trainer:
                     break
                     
                 # 1. 智能体根据当前状态选择动作（训练模式，开启探索）
+                # 这里就是强化学习里 Agent 对 Environment 做出的 Action
                 action = self.agent.select_action(state, is_training=True)
                 
                 # 2. 环境执行动作，返回反馈
+                # Environment 响应 Action，给出新的状态和这步的得分 Reward
                 next_state, reward, done = self.env.step(state, action)
                 
                 # 3. 智能体接收单步反馈
+                # 智能体把这步的经验收下（如果是 MC，就记在小本本上；如果是 DQN，就扔进回放池并当场学习）
                 self.agent.step(state, action, reward, next_state, done)
                 
                 state = next_state
@@ -52,7 +55,8 @@ class Trainer:
                 if done:
                     break
                     
-            # 4. 回合结束，智能体进行回合级别的结算（如计算G值，衰减epsilon等）
+            # 4. 回合结束，智能体进行回合级别的结算
+            # (如 MC 的轨迹结算、计算 G 值，或者 DQN 的衰减 epsilon、拷贝目标网络等)
             self.agent.end_episode(ep)
             
             # (可选) 针对没有自己打印日志的 Agent（例如 DQN），在这里补上简要日志

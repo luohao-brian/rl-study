@@ -193,7 +193,13 @@ class DQNAgent(BaseAgent):
         return r * self.env.width + c
 
     def select_action(self, state: Tuple[int, int], is_training: bool = True) -> str:
-        """实现 BaseAgent 接口：使用ε-贪婪策略选择动作"""
+        """实现 BaseAgent 接口：动作选择策略
+        
+        基于 ε-贪婪策略：
+        - 探索阶段：随机选择一个动作。
+        - 利用阶段：把当前位置状态丢进我们的“大脑”（Q网络）中，
+          网络会直接输出上下左右四个方向的打分，我们挑分数最高的那个。
+        """
         if is_training and random.random() < self.epsilon:
             return random.choice(self.env.actions)
         # Greedy based on current Q-network
@@ -206,7 +212,12 @@ class DQNAgent(BaseAgent):
             return self.idx_to_action[action_idx]
 
     def step(self, state, action, reward, next_state, done):
-        """实现 BaseAgent 接口：将单步经验记入回放缓冲区，并执行更新"""
+        """实现 BaseAgent 接口：处理单步经验
+        
+        与 MC 等到一局打完才学习不同，DQN 是“边走边学”的：
+        1. 先把刚走的这一步 (S, A, R, S') 塞进经验回放池（像一个盲盒池）。
+        2. 立刻调用更新逻辑，尝试从盲盒池里抓取一批过去的经验，进行一次神经网络权重的梯度更新。
+        """
         self.buffer.push(
             self.state_to_index(state),
             self.action_to_idx[action],
@@ -217,7 +228,12 @@ class DQNAgent(BaseAgent):
         return self._update_network()
 
     def end_episode(self, episode_idx: int):
-        """实现 BaseAgent 接口：处理 epsilon 衰减和目标网络更新"""
+        """实现 BaseAgent 接口：回合结束时的处理
+        
+        一局结束后，我们做两件事：
+        1. 衰减探索率 ε：智能体玩得越久，越有经验，瞎走的概率就应该越来越小。
+        2. 更新目标网络：每隔固定局数，把聪明的“大脑”（当前网络）复制一份给“目标网络”，防止学习目标来回晃动。
+        """
         self._decay_epsilon(episode_idx)
         if episode_idx % self.cfg.target_update_interval == 0:
             self._hard_update_target()

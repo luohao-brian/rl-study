@@ -73,7 +73,12 @@ class MCAgent(BaseAgent):
         return best_a
 
     def select_action(self, state, is_training: bool = True):
-        """实现 BaseAgent 接口"""
+        """实现 BaseAgent 接口：动作选择策略
+        
+        这里使用的是典型的 ε-贪婪策略 (Epsilon-Greedy)：
+        - 在训练模式下，有 ε 的概率随机选择一个动作，目的是“探索”未知的地图区域。
+        - 否则（或在测试模式下），查阅策略字典 policy，选择当前已知的最优动作（利用已知最优解）。
+        """
         if is_training and random.random() < self.epsilon:
             return random.choice(self.env.actions)
         a = self.policy.get(state)
@@ -82,11 +87,21 @@ class MCAgent(BaseAgent):
         return a
 
     def step(self, state, action, reward, next_state, done):
-        """实现 BaseAgent 接口，将单步经验记入当前轨迹"""
+        """实现 BaseAgent 接口：处理单步经验
+        
+        在蒙特卡洛方法中，智能体不会走一步学一步。
+        它必须先把走的每一步记录下来，串成一条完整的“轨迹 (Trajectory)”。
+        """
         self.current_trajectory.append((state, action, reward, next_state))
 
     def end_episode(self, episode_idx: int):
-        """实现 BaseAgent 接口，反向计算回报并更新 Q-Table，然后清空轨迹"""
+        """实现 BaseAgent 接口：回合结束时的核心学习逻辑
+        
+        当一局游戏结束（到达终点或步数耗尽），MC 算法开始“事后诸葛亮”式的反思：
+        1. 逆序遍历这条轨迹，从最后一步开始往前倒推。
+        2. 计算累计回报 G（当前的 reward + 未来的 G 折扣）。
+        3. 用这个实际获得的 G 去更新当前 (状态, 动作) 在 Q-Table 中的平均分。
+        """
         G = 0.0
         visited_states = set()
         updated_keys = []

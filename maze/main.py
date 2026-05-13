@@ -5,6 +5,8 @@
 这是一个用于求解5x5迷宫问题的强化学习框架，支持多种强化学习算法：
 - dqn: DQN（深度Q网络）深度强化学习方法
 - mc: 蒙特卡洛控制方法
+- dp: 动态规划（价值迭代）方法
+- td: 时间差分控制方法（支持 Q-Learning 与 Sarsa）
 
 设计思路：
 1. 使用命令行接口(CLI)提供统一入口，支持多种算法
@@ -24,6 +26,8 @@
 使用示例：
   uv run main.py mc      # 使用蒙特卡洛方法求解
   uv run main.py dqn     # 使用DQN方法求解
+  uv run main.py dp      # 使用动态规划方法求解
+  uv run main.py td --algo sarsa  # 使用Sarsa算法求解
 """
 
 import click
@@ -123,6 +127,92 @@ def dqn(mode, model_path):
     elif mode == "eval":
         agent.load(model_path)
         trainer.evaluate(max_steps=200)
+        trainer.print_summary()
+
+
+@cli.command()
+@click.option("--mode", type=click.Choice(["train", "eval"]), default="train", help="运行模式：train(训练) 或 eval(评估)")
+@click.option("--model-path", type=str, default="models/dp_model.json", help="DP模型文件的保存/加载路径")
+def dp(mode, model_path):
+    """使用动态规划（价值迭代）方法求解迷宫"""
+    from maze.dp_agent import DPAgent, DPConfig
+    from maze.trainer import Trainer
+
+    print(f"=== 动态规划价值迭代方法求解迷宫 (模式: {mode}) ===")
+
+    env = build_env(
+        width=5,
+        height=5,
+        start=(0, 0),
+        goal=(4, 4),
+        obstacles={(1, 1), (1, 3), (2, 2), (3, 1), (3, 3)},
+        step_reward=-1.0,
+        goal_reward=10.0,
+        invalid_penalty=-5.0,
+    )
+    print("环境初始化完成：5x5 迷宫（含障碍），起点(0,0)，终点(4,4)。")
+    print("迷宫布局（S=起点，G=终点，X=障碍，·=空）：")
+    print(env.render_maze())
+
+    cfg = DPConfig()
+    print(f"参数: episodes(轮数)={cfg.episodes}, theta={cfg.theta}, gamma={cfg.gamma}, epsilon={cfg.epsilon}")
+
+    agent = DPAgent(env, cfg)
+    trainer = Trainer(env, agent)
+
+    if mode == "train":
+        # 这里的 episodes 对应价值迭代的全扫描轮数
+        trainer.train(episodes=cfg.episodes, max_steps=10, log_interval=cfg.log_interval)
+        agent.save(model_path)
+
+        trainer.evaluate(max_steps=100)
+        trainer.print_summary()
+    elif mode == "eval":
+        agent.load(model_path)
+        trainer.evaluate(max_steps=100)
+        trainer.print_summary()
+
+
+@cli.command()
+@click.option("--mode", type=click.Choice(["train", "eval"]), default="train", help="运行模式：train(训练) 或 eval(评估)")
+@click.option("--algo", type=click.Choice(["q_learning", "sarsa"]), default="q_learning", help="具体算法选择")
+@click.option("--model-path", type=str, default="models/td_model.json", help="TD模型文件的保存/加载路径")
+def td(mode, algo, model_path):
+    """使用时间差分控制方法（Q-Learning/Sarsa）求解迷宫"""
+    from maze.td_agent import TDAgent, TDConfig
+    from maze.trainer import Trainer
+
+    print(f"=== 时间差分控制方法 ({algo}) 求解迷宫 (模式: {mode}) ===")
+
+    env = build_env(
+        width=5,
+        height=5,
+        start=(0, 0),
+        goal=(4, 4),
+        obstacles={(1, 1), (1, 3), (2, 2), (3, 1), (3, 3)},
+        step_reward=-1.0,
+        goal_reward=10.0,
+        invalid_penalty=-5.0,
+    )
+    print("环境初始化完成：5x5 迷宫（含障碍），起点(0,0)，终点(4,4)。")
+    print("迷宫布局（S=起点，G=终点，X=障碍，·=空）：")
+    print(env.render_maze())
+
+    cfg = TDConfig(algorithm=algo)
+    print(f"参数: algorithm={cfg.algorithm}, episodes={cfg.episodes}, alpha={cfg.alpha}, gamma={cfg.gamma}, epsilon={cfg.epsilon}")
+
+    agent = TDAgent(env, cfg)
+    trainer = Trainer(env, agent)
+
+    if mode == "train":
+        trainer.train(episodes=cfg.episodes, max_steps=cfg.max_steps, log_interval=cfg.log_interval)
+        agent.save(model_path)
+
+        trainer.evaluate(max_steps=100)
+        trainer.print_summary()
+    elif mode == "eval":
+        agent.load(model_path)
+        trainer.evaluate(max_steps=100)
         trainer.print_summary()
 
 
